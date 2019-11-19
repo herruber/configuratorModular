@@ -2,13 +2,13 @@
 var renderManager;
 var buildManager;
 var controlManager;
+var session;
 
 
 function Init() {
 
     buildManager = new BuildManager({
-        spacingX: 3.5,
-        spacingY: 3.5
+      size: new THREE.Vector3(2.95, 3, 8.65)
     });
 
     var element = document.getElementById("renderview");
@@ -18,7 +18,7 @@ function Init() {
     directionalLight.intensity = 1;
     directionalLight.position.set(10, 20, 5);
     directionalLight.castShadow = true;
-    directionalLight.shadow.bias = 0.000025;
+    directionalLight.shadow.bias = 0.00003;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
     directionalLight.shadow.camera.near = 0.2;
@@ -33,40 +33,85 @@ function Init() {
     directionalLight.add(light)
 
     var sceneA = new THREE.Scene();
-    sceneA.add(directionalLight);
+    sceneA.userData.channels = {
+        "default": [],
+        "castable": []
+    }
 
     var sceneB = new THREE.Scene();
-    sceneB.add(directionalLight.clone());
+    sceneB.userData.channels = {
+        "default": [],
+        "castable": []
+    }
+
+    var aspect = element.clientWidth / element.clientHeight;
+    var osize = 5;
 
     var renderModeSettings2d = {
         position: new THREE.Vector3(0, 5, 0),
-        camera: new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100),
+        camera: new THREE.OrthographicCamera(-osize * aspect, osize * aspect, osize, -osize, 0.1, 100),
         scene: sceneA,
         element: element,
         enableRotation: false,
-        enablePanning: true
+        enablePanning: true,
+        wireframe: true,
+        grid: true
     }
 
     var renderModeSettings3d = {
         position: new THREE.Vector3(0, 1, -10),
-        camera: new THREE.PerspectiveCamera(60, element.clientWidth / element.clientHeight, 0.1, 100),
+        camera: new THREE.PerspectiveCamera(60, aspect, 0.1, 100),
         scene: sceneB,
         element: element,
         enableRotation: true,
         enablePanning: true
     }
 
-
-    controlManager = new Controls({
+    session = new Session({
         modes: {
             "2d": new RenderMode(renderModeSettings2d),
             "3d": new RenderMode(renderModeSettings3d)
-        },
-        raycaster: new THREE.Raycaster()
+        }
+    });
+
+    session.activeMode = session.modes["2d"];
+
+    var gridhelper = new THREE.GridHelper(100, 100, new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 0));
+    gridhelper.material.opacity = 0.25;
+    gridhelper.material.transparent = true;
+    session.Add(gridhelper, null, ["2d"]);
+    session.Add(directionalLight, null, ["3d"]);
+
+    var material = new THREE.MeshBasicMaterial();
+
+    var indicator = new THREE.LineSegments(
+        new THREE.EdgesGeometry(
+        new THREE.BoxBufferGeometry(buildManager.settings.size.x, buildManager.settings.size.y, buildManager.settings.size.z), 30),
+        new THREE.LineBasicMaterial({ color: new THREE.Color(0, 1, 0) }));
+
+    indicator.userData.events = {
+        "onUpdate": function () {
+            console.log("updating...");
+
+            if (!controlManager.target) {
+                indicator.visible = false;
+                return;
+            }
+
+            indicator.visible = true;
+            session.activeMode.scene.add(indicator);
+            indicator.position = controlManager.target.position;
+        }
+    }
+
+    session.Add(indicator, "default", ["2d"]);
+
+    controlManager = new Controls({
+        raycaster: new THREE.Raycaster(),
+        indicator: indicator
     });
 
     renderManager = new Renderer(element);
-
     renderManager.Render();
 
     document.addEventListener("keydown", function (event) {
@@ -80,7 +125,7 @@ function Init() {
     document.addEventListener("pointermove", function (event) {
 
         controlManager.onPointerMove(event);
-        controlManager.rayCast();
+        controlManager.rayCast("castable");
 
     })
 
@@ -89,7 +134,7 @@ function Init() {
     });
 
     document.addEventListener("click", function (event) {
-
+        controlManager.onLeftClick(event);
     })
 
     document.addEventListener("touchstart", function (event) {

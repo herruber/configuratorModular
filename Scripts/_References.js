@@ -12,5 +12,6 @@
 /// <reference path="App/Ui.js" />
 /// <reference path="App/Controls.js" />
 /// <reference path="App/Settings.js" />
+/// <reference path="App/Session.js" />
 
 

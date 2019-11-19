@@ -3,48 +3,37 @@
 function Controls(settings) {
 
     var self = this;
+    if (settings === null) return this;
     this.raycaster = settings.raycaster;
-    this.modes = settings.modes;
-    this.activeMode = null;
     this.screenPos = new THREE.Vector3();
     this.clipPos = new THREE.Vector3();
-    
-    for (var prop in this.modes) {
-        this.activeMode = this.modes[prop];
-        break;
-    }
+    this.intersects = [];
+    this.target = undefined;
+    this.indicator = settings.indicator;
 
-    this.SetMode = function (name) {
 
-        if (this.activeMode) {
-            this.activeMode.controller.enabled = false;
-        }
+    //Used to determine if user is inside an object
+    this.isInside = false;
 
-        this.activeMode = this.modes[name];
-        this.activeMode.controller.enabled = true;
-
-        if (!this.activeMode.isRotationEnabled) this.activeMode.camera.rotation.set(0, 0, 0);
-
-        this.activeMode.controller.update();
-    }
-
-    this.rayCast = function (objects) {
+    this.rayCast = function (channel) {
 
     
-        var scene = self.activeMode.scene;
-        objects = objects || scene.children;
+        if (!channel) channel = "default";
+
+        var scene = session.activeMode.scene;
+        objects = scene.userData.channels[channel];
 
         // update the picking ray with the camera and mouse position
-        self.raycaster.setFromCamera(self.clipPos, self.activeMode.camera);
+        self.raycaster.setFromCamera(self.clipPos, session.activeMode.camera);
 
         // calculate objects intersecting the picking ray
         var intersects = self.raycaster.intersectObjects(objects);
 
-        for (var i = 0; i < intersects.length; i++) {
-            intersects[i].object.material.color.set(0xff0000);
-        }
+        this.intersects = intersects;
 
-        //renderer.render(scene, camera);
+        if (intersects.length == 0) return null;
+
+        return intersects[0];
     }
 
     this.UpdateMousePosition = function (event) {
@@ -76,30 +65,58 @@ function Controls(settings) {
 
         switch (event.key) {
             case "0":
-                self.SetMode("2d");
+                session.SetMode("2d");
                 break;
             case "1":
-                self.SetMode("3d");
+                session.SetMode("3d");
                 break;
             case "2":
-                buildManager.AddBarack(new LoadSettings("/Content/Meshes/barack.glb",
-                    new THREE.Vector3(),
-                    new THREE.Quaternion()
-                    ));
+
+                buildManager.Instantiate(
+                    {
+                        url: "/Content/Meshes/barack.glb",
+                        position: buildManager.position,
+                        rotation: new THREE.Quaternion(),
+                        parent: null,
+                        channel: "castable",
+                        events: {
+                            "onSelect": function (owner) {
+
+                                owner.traverse(function (light) {
+
+                                    if (light.type === "PointLight") {
+                                        light.visible = true;
+                                    }
+                                });
+                                
+                                //self.indicator.position.set(owner.position.x, owner.position.y + owner.userData.size.getSize().y / 2.0, owner.position.z);
+                            },
+                            "onDeselect": function (owner) {
+                                debugger;
+                                owner.traverse(function (light) {
+
+                                    if (light.type === "PointLight") {
+                                        light.visible = false;
+                                    }
+                                });
+                            }
+                        }
+                    });
+                buildManager.position.x += buildManager.settings.size.x;
                 break;
             case "3":
                 break;
             case "ArrowUp":
-                buildManager.floor++;
+                buildManager.position.add(0, buildManager.settings.size.y, 0);
                 break;
             case "ArrowDown":
-                buildManager.floor--;
+                buildManager.position.subtract(0, buildManager.settings.size.y, 0);
                 break;
             case "ArrowLeft":
-                buildManager.column--;
+                buildManager.position.subtract(buildManager.settings.size.x, 0, 0);
                 break;
             case "ArrowRight":
-                buildManager.column++;
+                buildManager.position.add(buildManager.settings.size.x10, 0, 0);
                 break;
             default:
 
@@ -109,6 +126,32 @@ function Controls(settings) {
 
     this.onPointerMove = function (event) {
         self.UpdateMousePosition(event);
+    }
+
+    this.ExecuteEvent = function (object, name) {
+
+        var events = object.userData.events;
+        if (events && events[name]) events[name]();
+
+    }
+
+    this.onLeftClick = function (event) {
+
+
+        var hit = self.rayCast("castable");
+
+        if (hit) {
+
+            var oldhit = self.target;
+            self.target = hit;
+
+            if(oldhit) self.ExecuteEvent(oldhit.object, "onDeselect");
+            self.ExecuteEvent(hit.object, "onSelect");
+         
+          
+        }
+        else self.target = null;
+
     }
 
     return this;

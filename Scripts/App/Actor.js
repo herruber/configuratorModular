@@ -1,5 +1,9 @@
 
- function Actor(_model){
-     this.model = _model;
-     return this;
+ function Actor(updateFn){
+   
+     return {
+         update: updateFn
+     }
+
+
  }
